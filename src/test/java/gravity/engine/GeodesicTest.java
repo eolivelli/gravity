@@ -67,7 +67,9 @@ class GeodesicTest {
             double exact = exactDeflection(b, 1.0);
             // velocityAngle wraps at +-pi; deflections here exceed pi only for b close to critical
             measured = measured - 2 * Math.PI * Math.round((measured - exact) / (2 * Math.PI));
-            assertEquals(exact, measured, 3e-4, "b=" + b);   // finite start/escape radius limits accuracy
+            // residual is ~4e-8 from the finite start radius (scales as M b / start^2); the tolerance
+            // is set tight enough to catch a regression of the integrator
+            assertEquals(exact, measured, 1e-6, "b=" + b);
         }
     }
 

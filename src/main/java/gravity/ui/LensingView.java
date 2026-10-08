@@ -156,7 +156,7 @@ public final class LensingView implements View {
                     appliedGeneration = gen;
                 });
             } catch (Throwable t) {
-                System.err.println("lensing render failed: " + t);
+                t.printStackTrace();
                 Platform.runLater(() -> {
                     if (gen != generation) return;
                     info.setText("Rendering failed: " + t.getClass().getSimpleName());

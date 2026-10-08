@@ -113,19 +113,25 @@ public final class GeodesicView implements View {
     private void presetOrbit(Model model) {
         particles.clear();
         Schwarzschild m = model.metric();
-        double r = Math.max(model.viewRadius() * 0.55, Math.max(m.surface() + 4 * m.mass(), m.isco() + 4 * m.mass()));
+        double r = orbitRadius(m, model.viewRadius());
         add(model, r, 0, 0, 1, boundOrbitSpeed(m, r, 0.80));
         double r2 = Math.max(model.viewRadius() * 0.3, Math.max(m.surface() + 2 * m.mass(), m.isco() + 2 * m.mass()));
         add(model, r2, 0, 0, 1, m.circularOrbitSpeed(r2));
     }
 
+    /** Launch radius of the outer preset orbit: just over half the map, but well outside the ISCO and the body. */
+    static double orbitRadius(Schwarzschild m, double viewRadius) {
+        return Math.max(viewRadius * 0.55, Math.max(m.surface() + 4 * m.mass(), m.isco() + 4 * m.mass()));
+    }
+
     /**
-     * Tangential launch speed at r that gives an eccentric but bound orbit:
-     * the requested fraction of the circular speed, raised until the energy is
-     * below the inner barrier of the effective potential (so the particle
-     * neither plunges nor hits the star at pericentre).
+     * Tangential launch speed at r (which must be beyond the ISCO) that gives
+     * an eccentric but bound orbit: the requested fraction of the circular
+     * speed, raised until the energy is below the inner barrier of the
+     * effective potential and, for a star, the pericentre clears the surface.
      */
     static double boundOrbitSpeed(Schwarzschild m, double r, double fraction) {
+        if (r < m.isco()) throw new IllegalArgumentException("launch radius must be beyond the ISCO: " + r);
         double vc = m.circularOrbitSpeed(r);
         for (double k = fraction; k < 0.995; k += 0.01) {
             Geodesic g = Geodesic.launch(m, r, 0, 0, 1, vc * k);
@@ -134,10 +140,10 @@ public final class GeodesicView implements View {
             if (disc < 0) continue;                                   // no barrier at all: plunges
             double rBarrier = (L * L - Math.sqrt(disc)) / (2 * M);    // inner extremum of V(r)
             double vBarrier = m.f(rBarrier) * (1 + L * L / (rBarrier * rBarrier));
-            double rPeri = pericentre(m, g, r);
-            if (E * E < vBarrier && rPeri > m.surface() * 1.05) return vc * k;
+            if (E * E >= vBarrier) continue;                           // over the barrier: plunges
+            if (m.isBlackHole() || pericentre(m, g, r) > m.radius() * 1.05) return vc * k;
         }
-        return vc;
+        return vc;   // stable circular orbit, since r > ISCO
     }
 
     /** Smallest r on the orbit, found by stepping once around; r0 is the launch radius (apocentre). */
