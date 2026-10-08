@@ -65,3 +65,13 @@ Quick checks that have been used and should still hold after engine changes:
 - Plain Java 21, no Lombok, no frameworks beyond JavaFX.
 - Keep user-facing text free of jargon; prefer "far-away clock" to "asymptotic
   observer". Jargon belongs in code comments and the README.
+
+## Tests and CI
+
+- `mvn verify` (JDK 21) runs the JUnit 5 engine tests in `src/test/java`.
+  They encode the physics checks listed above; extend them when touching the
+  engine.
+- GitHub Actions (`.github/workflows/ci.yml`) runs the tests and then renders
+  all views headless under Xvfb for both a black hole and a neutron star,
+  uploading the PNGs as the `snapshots` artifact. Download them to review
+  rendering changes from a pull request.
