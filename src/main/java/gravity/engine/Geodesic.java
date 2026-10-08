@@ -83,7 +83,11 @@ public final class Geodesic {
     public double x() { return r * Math.cos(phi); }
     public double y() { return r * Math.sin(phi); }
 
-    /** Value of the Hamiltonian: 0 for light, -1/2 for massive particles, conserved along the motion. */
+    /**
+     * Value of the Hamiltonian: 0 for light, -1/2 for massive particles,
+     * conserved along the motion. Only meaningful while the particle is
+     * moving: on capture or impact r is snapped to the surface but p_r is not.
+     */
     public double hamiltonian() {
         double f = m.f(r);
         return 0.5 * (-energy * energy / f + f * pr * pr + angularMomentum * angularMomentum / (r * r));
@@ -118,10 +122,12 @@ public final class Geodesic {
      * Natural step in lambda: a few percent of the distance to the centre or
      * to the horizon, divided by the coordinate speed so that the position
      * never moves by more than that fraction in one step, whatever the energy.
+     * The step is not capped far away: there the motion is nearly straight
+     * and RK4 stays accurate with steps of many M.
      */
     private double stepSize() {
-        double scale = m.isBlackHole() ? Math.min(r, r - m.rs()) : r;
-        double h = Math.min(1.0, Math.max(1e-7, 0.03 * scale));
+        double scale = m.isBlackHole() ? r - m.rs() : r;
+        double h = Math.max(1e-7, 0.03 * scale);
         double speed = Math.max(1.0, Math.max(Math.abs(m.f(r) * pr), Math.abs(angularMomentum) / r));
         return h / speed;
     }
@@ -180,6 +186,9 @@ public final class Geodesic {
      */
     public void advance(double dt, double rEscape) {
         double target = t + dt;
+        // far away a step covers ~0.03 r of t, near the horizon ~0.03 rs: a frame of
+        // 100 M at 60 fps needs a few hundred steps at most, so the guard only
+        // protects against absurd dt values (which are then silently truncated)
         int guard = 0;
         while (status == Status.MOVING && t < target && guard++ < 20000) {
             double h = stepSize();

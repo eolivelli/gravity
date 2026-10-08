@@ -113,11 +113,44 @@ public final class GeodesicView implements View {
     private void presetOrbit(Model model) {
         particles.clear();
         Schwarzschild m = model.metric();
-        // keep both orbits comfortably outside the innermost stable circular orbit
         double r = Math.max(model.viewRadius() * 0.55, Math.max(m.surface() + 4 * m.mass(), m.isco() + 4 * m.mass()));
-        add(model, r, 0, 0, 1, m.circularOrbitSpeed(r) * 0.80);
+        add(model, r, 0, 0, 1, boundOrbitSpeed(m, r, 0.80));
         double r2 = Math.max(model.viewRadius() * 0.3, Math.max(m.surface() + 2 * m.mass(), m.isco() + 2 * m.mass()));
         add(model, r2, 0, 0, 1, m.circularOrbitSpeed(r2));
+    }
+
+    /**
+     * Tangential launch speed at r that gives an eccentric but bound orbit:
+     * the requested fraction of the circular speed, raised until the energy is
+     * below the inner barrier of the effective potential (so the particle
+     * neither plunges nor hits the star at pericentre).
+     */
+    static double boundOrbitSpeed(Schwarzschild m, double r, double fraction) {
+        double vc = m.circularOrbitSpeed(r);
+        for (double k = fraction; k < 0.995; k += 0.01) {
+            Geodesic g = Geodesic.launch(m, r, 0, 0, 1, vc * k);
+            double L = g.angularMomentum(), E = g.energy(), M = m.mass();
+            double disc = L * L * L * L - 12 * M * M * L * L;
+            if (disc < 0) continue;                                   // no barrier at all: plunges
+            double rBarrier = (L * L - Math.sqrt(disc)) / (2 * M);    // inner extremum of V(r)
+            double vBarrier = m.f(rBarrier) * (1 + L * L / (rBarrier * rBarrier));
+            double rPeri = pericentre(m, g, r);
+            if (E * E < vBarrier && rPeri > m.surface() * 1.05) return vc * k;
+        }
+        return vc;
+    }
+
+    /** Smallest r on the orbit, found by stepping once around; r0 is the launch radius (apocentre). */
+    private static double pericentre(Schwarzschild m, Geodesic g, double r0) {
+        double rmin = r0;
+        for (int i = 0; i < 200_000 && g.isMoving(); i++) {
+            double before = g.r();
+            g.step(0.02 * Math.max(1, g.r() - m.rs()));
+            if (g.r() <= m.surface()) return 0;
+            rmin = Math.min(rmin, g.r());
+            if (g.r() > before && rmin < r0 && g.phi() > Math.PI / 2) break;   // passed pericentre
+        }
+        return rmin;
     }
 
     private void presetRing(Model model) {

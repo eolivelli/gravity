@@ -9,8 +9,14 @@ class GeodesicTest {
 
     private static final Schwarzschild BH = new Schwarzschild(1.0, 0);
 
+    /**
+     * Light launched far away, moving in +x, with impact parameter b. The
+     * launch direction is measured by a static observer, so the conserved
+     * L/E = y / sqrt(f(start)); the offset is corrected to make it exactly b.
+     */
     private static Geodesic lightWithImpactParameter(double b, double start) {
-        Geodesic g = Geodesic.launch(BH, -start, b, 1, 0, 1);
+        double y = b * Math.sqrt(BH.f(Math.hypot(start, b)));
+        Geodesic g = Geodesic.launch(BH, -start, y, 1, 0, 1);
         g.run(start * 4, 5_000_000);
         return g;
     }
@@ -61,7 +67,7 @@ class GeodesicTest {
             double exact = exactDeflection(b, 1.0);
             // velocityAngle wraps at +-pi; deflections here exceed pi only for b close to critical
             measured = measured - 2 * Math.PI * Math.round((measured - exact) / (2 * Math.PI));
-            assertEquals(exact, measured, 2e-3, "b=" + b);   // finite start/escape radius limits accuracy
+            assertEquals(exact, measured, 3e-4, "b=" + b);   // finite start/escape radius limits accuracy
         }
     }
 

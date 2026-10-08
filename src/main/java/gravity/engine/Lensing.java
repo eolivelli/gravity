@@ -81,7 +81,6 @@ public final class Lensing {
      */
     public void render(int[] argb, int w, int h, double fov) { render(argb, w, h, fov, null); }
 
-    /** See {@link #render(int[], int, int, double)}; cancel may be null. */
     /** Size of one sky checker cell for a given field of view: a round number of degrees. */
     public static double cellDegrees(double fovDeg) {
         double raw = fovDeg / 12;
@@ -91,6 +90,7 @@ public final class Lensing {
         return best;
     }
 
+    /** See {@link #render(int[], int, int, double)}; cancel may be null. */
     public void render(int[] argb, int w, int h, double fov, AtomicBoolean cancel) {
         double tanH = Math.tan(fov / 2);
         double fovDeg = Math.toDegrees(fov);

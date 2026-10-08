@@ -34,6 +34,7 @@ class SchwarzschildTest {
             double expected = 1.5 * Math.sqrt(1 - rs / R) - 0.5 * Math.sqrt(1 - rs * r * r / (R * R * R));
             assertEquals(expected, star.lapse(r), 1e-12, "r=" + r);
         }
+        assertEquals(0.645644, star.lapse(0), 1e-6, "independent literal for the central value");
         assertEquals(star.lapse(R + 1e-9), star.lapse(R - 1e-9), 1e-6, "continuous at the surface");
         assertTrue(star.lapse(0) < star.lapse(R), "centre runs slower than surface");
     }

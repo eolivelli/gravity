@@ -26,7 +26,7 @@ public final class FogView implements View {
     private int[] buf;
     private float[] density;          // cached 1 - lapse(r) per pixel; depends only on size, zoom and body
     private Schwarzschild densityMetric;
-    private double densityRadius;
+    private double densityScale;
     private WritableImage img;
     private int iw, ih;
     private double time;
@@ -84,9 +84,9 @@ public final class FogView implements View {
             img = new WritableImage(w, h);
             densityMetric = null;
         }
-        if (densityMetric != m || densityRadius != vp.radius()) {
+        if (densityMetric != m || densityScale != scale) {
             densityMetric = m;
-            densityRadius = vp.radius();
+            densityScale = scale;
             IntStream.range(0, h).parallel().forEach(py -> {
                 double y = (cy - (py + 0.5)) / scale;
                 for (int px = 0; px < w; px++) {

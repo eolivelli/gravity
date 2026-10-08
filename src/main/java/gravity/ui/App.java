@@ -89,9 +89,11 @@ public final class App extends Application {
         Scene scene = new Scene(root, 1280, 860);
         scene.getRoot().setStyle("-fx-base: #2a2f42; -fx-background: #1e2232; -fx-text-fill: #e8e8f0;");
         KeyCode[] digits = {KeyCode.DIGIT1, KeyCode.DIGIT2, KeyCode.DIGIT3, KeyCode.DIGIT4, KeyCode.DIGIT5};
+        KeyCode[] numpad = {KeyCode.NUMPAD1, KeyCode.NUMPAD2, KeyCode.NUMPAD3, KeyCode.NUMPAD4, KeyCode.NUMPAD5};
         for (int i = 0; i < views.size() && i < digits.length; i++) {
             int idx = i;
             scene.getAccelerators().put(new KeyCodeCombination(digits[i]), () -> select(idx));
+            scene.getAccelerators().put(new KeyCodeCombination(numpad[i]), () -> select(idx));
         }
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.S), () -> snapshot(new File("snapshots"), current.name()));
 
