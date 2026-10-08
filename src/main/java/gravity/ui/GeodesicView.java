@@ -11,19 +11,29 @@ import javafx.scene.control.Slider;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 
 /** Light rays and free-falling particles: nothing pulls on them, they follow the straightest possible path. */
 public final class GeodesicView implements View {
 
     private static final int TRAIL_MAX = 4000;
+    static final Color LIGHT = Color.rgb(255, 220, 90);
+    static final Color MATTER = Color.rgb(90, 220, 255);
+    private static final Color LIGHT_DONE = LIGHT.deriveColor(0, 0.6, 0.6, 0.7);
+    private static final Color MATTER_DONE = MATTER.deriveColor(0, 0.6, 0.6, 0.7);
 
     private static final class Particle {
         final Geodesic g;
-        final Color color;
-        final List<double[]> trail = new ArrayList<>();
-        Particle(Geodesic g, Color color) { this.g = g; this.color = color; }
+        final Deque<double[]> trail = new ArrayDeque<>();
+        Particle(Geodesic g) { this.g = g; }
+        Color color() { return g.isMassless() ? (g.isMoving() ? LIGHT : LIGHT_DONE) : (g.isMoving() ? MATTER : MATTER_DONE); }
+        void record() {
+            if (trail.size() >= TRAIL_MAX) trail.pollFirst();
+            trail.addLast(new double[]{g.x(), g.y()});
+        }
     }
 
     private final List<Particle> particles = new ArrayList<>();
@@ -75,10 +85,8 @@ public final class GeodesicView implements View {
     @Override public void onShown(Model model) { if (particles.isEmpty()) presetBeam(model); }
 
     private void add(Model model, double x, double y, double dx, double dy, double v) {
-        Geodesic g = Geodesic.launch(model.metric(), x, y, dx, dy, v);
-        Color c = v >= 1 ? Color.rgb(255, 220, 90) : Color.rgb(90, 220, 255);
-        Particle p = new Particle(g, c);
-        p.trail.add(new double[]{g.x(), g.y()});
+        Particle p = new Particle(Geodesic.launch(model.metric(), x, y, dx, dy, v));
+        p.record();
         particles.add(p);
     }
 
@@ -105,10 +113,10 @@ public final class GeodesicView implements View {
     private void presetOrbit(Model model) {
         particles.clear();
         Schwarzschild m = model.metric();
-        double r = Math.max(model.viewRadius() * 0.55, m.surface() + 4 * m.mass());
-        double v = m.circularOrbitSpeed(r) * 0.80;
-        add(model, r, 0, 0, 1, v);
-        double r2 = Math.max(model.viewRadius() * 0.3, m.surface() + 2 * m.mass());
+        // keep both orbits comfortably outside the innermost stable circular orbit
+        double r = Math.max(model.viewRadius() * 0.55, Math.max(m.surface() + 4 * m.mass(), m.isco() + 4 * m.mass()));
+        add(model, r, 0, 0, 1, m.circularOrbitSpeed(r) * 0.80);
+        double r2 = Math.max(model.viewRadius() * 0.3, Math.max(m.surface() + 2 * m.mass(), m.isco() + 2 * m.mass()));
         add(model, r2, 0, 0, 1, m.circularOrbitSpeed(r2));
     }
 
@@ -128,7 +136,7 @@ public final class GeodesicView implements View {
         for (Particle p : particles) {
             if (!p.g.isMoving()) continue;
             p.g.advance(simDt, rEscape);
-            if (p.trail.size() < TRAIL_MAX) p.trail.add(new double[]{p.g.x(), p.g.y()});
+            p.record();
         }
     }
 
@@ -136,19 +144,22 @@ public final class GeodesicView implements View {
         Backdrop.clear(g, vp);
         Backdrop.drawBody(g, vp, model.metric(), true);
         g.setLineWidth(1.4);
+        int moving = 0, stopped = 0;
         for (Particle p : particles) {
-            if (p.trail.size() < 2) continue;
-            g.setStroke(p.g.isMoving() ? p.color : p.color.deriveColor(0, 0.6, 0.6, 0.7));
-            g.beginPath();
-            double[] first = p.trail.get(0);
-            g.moveTo(vp.sx(first[0]), vp.sy(first[1]));
-            for (int i = 1; i < p.trail.size(); i++) {
-                double[] q = p.trail.get(i);
-                g.lineTo(vp.sx(q[0]), vp.sy(q[1]));
+            if (p.g.isMoving()) moving++; else if (p.g.status() != Geodesic.Status.ESCAPED) stopped++;
+            Color c = p.color();
+            if (p.trail.size() >= 2) {
+                g.setStroke(c);
+                g.beginPath();
+                boolean first = true;
+                for (double[] q : p.trail) {
+                    if (first) { g.moveTo(vp.sx(q[0]), vp.sy(q[1])); first = false; }
+                    else g.lineTo(vp.sx(q[0]), vp.sy(q[1]));
+                }
+                g.stroke();
             }
-            g.stroke();
-            if (p.g.isMoving()) {
-                g.setFill(p.color);
+            if (p.g.status() != Geodesic.Status.ESCAPED) {
+                g.setFill(c);
                 double r = p.g.isMassless() ? 2.5 : 4;
                 g.fillOval(vp.sx(p.g.x()) - r, vp.sy(p.g.y()) - r, 2 * r, 2 * r);
             }
@@ -161,11 +172,8 @@ public final class GeodesicView implements View {
             g.fillOval(vp.sx(dragStart[0]) - 3, vp.sy(dragStart[1]) - 3, 6, 6);
         }
         Backdrop.scaleBar(g, vp, model);
-        long moving = particles.stream().filter(p -> p.g.isMoving()).count();
-        long captured = particles.stream().filter(p -> p.g.status() == Geodesic.Status.CAPTURED).count();
-        long hit = particles.stream().filter(p -> p.g.status() == Geodesic.Status.HIT_SURFACE).count();
-        String fate = model.metric().isBlackHole() ? "captured by the black hole: " + captured : "hit the star: " + hit;
-        Backdrop.hud(g, vp, "moving: " + moving + "   " + fate);
+        String fate = model.metric().isBlackHole() ? "frozen at the horizon: " : "hit the star: ";
+        Backdrop.hud(g, vp, "moving: " + moving + "   " + fate + stopped);
     }
 
     @Override public void mousePressed(double wx, double wy, Model model) {

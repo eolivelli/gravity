@@ -6,7 +6,7 @@ public final class Noise {
     private Noise() {}
 
     private static double hash(int x, int y, int z) {
-        int h = x * 374761393 + y * 668265263 + z * 2147483647;
+        int h = x * 374761393 + y * 668265263 + z * 1013904223;
         h = (h ^ (h >>> 13)) * 1274126177;
         h ^= h >>> 16;
         return (h & 0xFFFFFF) / (double) 0xFFFFFF;

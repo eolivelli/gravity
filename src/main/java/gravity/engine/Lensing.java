@@ -29,6 +29,7 @@ public final class Lensing {
     private final double[] surfaceAngle; // position (in the ray's plane) where the ray hits the star
 
     public Lensing(Schwarzschild m, double cameraRadius, double thetaMax, int n, AtomicBoolean cancel) {
+        if (n < 2) throw new IllegalArgumentException("table needs at least two entries");
         this.m = m;
         this.cameraRadius = cameraRadius;
         this.thetaMax = thetaMax;
@@ -60,16 +61,27 @@ public final class Lensing {
 
     public double cameraRadius() { return cameraRadius; }
 
-    /** Angular radius of the black hole shadow as seen from the camera, in radians. */
+    /**
+     * Angular radius of the black hole shadow as seen from the camera, in
+     * radians: 0 if there is none, NaN if the shadow extends beyond the table
+     * (i.e. fills the whole field of view).
+     */
     public double shadowAngle() {
+        if (hit[n - 1] == Hit.HORIZON) return Double.NaN;
         for (int i = n - 1; i >= 0; i--) if (hit[i] == Hit.HORIZON) return thetaMax * i / (n - 1);
         return 0;
     }
 
     /**
-     * Renders the camera image into an ARGB buffer. Camera looks along -x from
-     * (cameraRadius, 0, 0); screen right is -y, screen up is +z.
+     * Renders the camera image into an ARGB buffer. The camera sits at
+     * (cameraRadius, 0, 0) and looks along -x. Each pixel's ray is traced in
+     * its own plane through the x axis; the in-plane +y direction of that
+     * plane is mapped to the pixel's direction from the image centre.
+     * Rendering stops early if cancel is set.
      */
+    public void render(int[] argb, int w, int h, double fov) { render(argb, w, h, fov, null); }
+
+    /** See {@link #render(int[], int, int, double)}; cancel may be null. */
     /** Size of one sky checker cell for a given field of view: a round number of degrees. */
     public static double cellDegrees(double fovDeg) {
         double raw = fovDeg / 12;
@@ -79,7 +91,7 @@ public final class Lensing {
         return best;
     }
 
-    public void render(int[] argb, int w, int h, double fov) {
+    public void render(int[] argb, int w, int h, double fov, AtomicBoolean cancel) {
         double tanH = Math.tan(fov / 2);
         double fovDeg = Math.toDegrees(fov);
         double cell = Math.toRadians(cellDegrees(fovDeg));
@@ -93,6 +105,7 @@ public final class Lensing {
         int[] spotColor = { 0xFFFFF4C0, 0xFFFFB070, 0xFFB0E0FF };
 
         IntStream.range(0, h).parallel().forEach(py -> {
+            if (cancel != null && cancel.get()) return;
             double v = (h / 2.0 - (py + 0.5)) / (w / 2.0) * tanH;
             for (int px = 0; px < w; px++) {
                 double u = ((px + 0.5) - w / 2.0) / (w / 2.0) * tanH;
@@ -155,6 +168,8 @@ public final class Lensing {
         float hue = (float) (210 + 110 * Math.max(-1, Math.min(1, lon / span)));
         float sat = (float) (0.35 + 0.5 * (Math.max(-1, Math.min(1, lat / span)) + 1) / 2);
         float bri = check ? 0.78f : 0.38f;
+        // java.awt.Color is used only as a pure HSB-to-RGB function; it needs no display
+        // and keeps the engine free of JavaFX, which is the point of the "pure engine" rule.
         return 0xFF000000 | (java.awt.Color.HSBtoRGB(hue / 360f, sat, bri) & 0xFFFFFF);
     }
 

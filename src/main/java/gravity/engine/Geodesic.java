@@ -16,6 +16,9 @@ public final class Geodesic {
 
     public enum Status { MOVING, CAPTURED, HIT_SURFACE, ESCAPED }
 
+    /** A black-hole trajectory is declared captured once r - rs is below this fraction of rs. */
+    public static final double HORIZON_MARGIN = 1e-6;
+
     private final Schwarzschild m;
     private final boolean massless;
     private final double energy;
@@ -53,7 +56,7 @@ public final class Geodesic {
         boolean massless = v >= 1;
         double speed = massless ? 1 : Math.max(0, v);
         double gamma = massless ? 1 : 1 / Math.sqrt(1 - speed * speed);
-        if (r <= m.surface() * (1 + 1e-6)) {
+        if (r <= stopRadius(m)) {
             Geodesic g = new Geodesic(m, massless, 1, 0, r, phi, 0);
             g.status = m.isBlackHole() ? Status.CAPTURED : Status.HIT_SURFACE;
             return g;
@@ -65,16 +68,33 @@ public final class Geodesic {
         return new Geodesic(m, massless, energy, angularMomentum, r, phi, pr);
     }
 
+    private static double stopRadius(Schwarzschild m) {
+        return m.isBlackHole() ? m.rs() * (1 + HORIZON_MARGIN) : m.radius();
+    }
+
     public Status status() { return status; }
     public boolean isMoving() { return status == Status.MOVING; }
     public boolean isMassless() { return massless; }
+    public double energy() { return energy; }
+    public double angularMomentum() { return angularMomentum; }
     public double r() { return r; }
     public double phi() { return phi; }
     public double t() { return t; }
     public double x() { return r * Math.cos(phi); }
     public double y() { return r * Math.sin(phi); }
 
-    /** Angle (in the plane, from the +x axis) of the direction of motion. */
+    /** Value of the Hamiltonian: 0 for light, -1/2 for massive particles, conserved along the motion. */
+    public double hamiltonian() {
+        double f = m.f(r);
+        return 0.5 * (-energy * energy / f + f * pr * pr + angularMomentum * angularMomentum / (r * r));
+    }
+
+    /**
+     * Angle (from the +x axis) of the coordinate velocity (dr, r dphi) in the
+     * plane. This is not the direction a local static observer would measure
+     * (that would need a factor 1/sqrt(f) on dr), but far from the mass the two
+     * agree, which is where it is used.
+     */
     public double velocityAngle() {
         double dr = m.f(r) * pr;
         double rdphi = angularMomentum / r;
@@ -94,13 +114,19 @@ public final class Geodesic {
         out[3] = energy / f;
     }
 
+    /**
+     * Natural step in lambda: a few percent of the distance to the centre or
+     * to the horizon, divided by the coordinate speed so that the position
+     * never moves by more than that fraction in one step, whatever the energy.
+     */
     private double stepSize() {
-        // shrink the step near the horizon, where p_r grows like 1/f
-        double scale = Math.min(r, 3 * (r - m.rs()));
-        return Math.min(1.0, Math.max(1e-5, 0.03 * scale));
+        double scale = m.isBlackHole() ? Math.min(r, r - m.rs()) : r;
+        double h = Math.min(1.0, Math.max(1e-7, 0.03 * scale));
+        double speed = Math.max(1.0, Math.max(Math.abs(m.f(r) * pr), Math.abs(angularMomentum) / r));
+        return h / speed;
     }
 
-    /** One RK4 step of size h in the affine parameter. */
+    /** One RK4 step of size h in the affine parameter, with no bounds checking. */
     public void step(double h) {
         if (status != Status.MOVING) return;
         deriv(r, pr, k1);
@@ -113,12 +139,21 @@ public final class Geodesic {
         t += h / 6 * (k1[3] + 2 * k2[3] + 2 * k3[3] + k4[3]);
     }
 
-    private void checkBounds(double rBefore, double rEscape) {
+    private void checkBounds(double rBefore, double phiBefore, double rEscape) {
         boolean wild = !Double.isFinite(r) || !Double.isFinite(pr) || !Double.isFinite(phi)
                 || Math.abs(r - rBefore) > 0.5 * rBefore;
-        if (wild || r <= m.surface() * (1 + 1e-3)) {
+        double stop = stopRadius(m);
+        if (wild) {
+            // last resort; the step-size rule should make this unreachable
             status = m.isBlackHole() ? Status.CAPTURED : Status.HIT_SURFACE;
-            r = wild ? m.surface() : Math.max(r, m.surface());
+            r = stop;
+            phi = phiBefore;
+        } else if (r <= stop) {
+            // interpolate the crossing so the hit point is on the surface, not past it
+            double frac = rBefore > r ? (rBefore - stop) / (rBefore - r) : 1;
+            phi = phiBefore + frac * (phi - phiBefore);
+            r = stop;
+            status = m.isBlackHole() ? Status.CAPTURED : Status.HIT_SURFACE;
         } else if (r > rEscape) {
             status = Status.ESCAPED;
         }
@@ -128,9 +163,9 @@ public final class Geodesic {
     public int run(double rEscape, int maxSteps) {
         int n = 0;
         while (status == Status.MOVING && n < maxSteps) {
-            double rBefore = r;
+            double rBefore = r, phiBefore = phi;
             step(stepSize());
-            checkBounds(rBefore, rEscape);
+            checkBounds(rBefore, phiBefore, rEscape);
             n++;
         }
         return n;
@@ -138,20 +173,22 @@ public final class Geodesic {
 
     /**
      * Advance by dt of coordinate time (the time of a far-away observer).
-     * Near the horizon dt/dlambda diverges, so the particle appears to freeze,
-     * exactly as a distant observer would see it.
+     * Near the horizon dt/dlambda diverges, so the particle slows down and
+     * creeps toward rs without ever reaching it in finite t, exactly as a
+     * distant observer would see it; it is declared captured once it is within
+     * HORIZON_MARGIN of rs.
      */
     public void advance(double dt, double rEscape) {
         double target = t + dt;
         int guard = 0;
-        while (status == Status.MOVING && t < target && guard++ < 5000) {
+        while (status == Status.MOVING && t < target && guard++ < 20000) {
             double h = stepSize();
             double dtdl = energy / m.f(r);
             double needed = (target - t) / dtdl;
             if (needed < h) h = needed;
-            double rBefore = r;
+            double rBefore = r, phiBefore = phi;
             step(h);
-            checkBounds(rBefore, rEscape);
+            checkBounds(rBefore, phiBefore, rEscape);
         }
     }
 }

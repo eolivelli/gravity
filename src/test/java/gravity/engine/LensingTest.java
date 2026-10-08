@@ -13,7 +13,13 @@ class LensingTest {
         double rCam = 25;
         Lensing lens = new Lensing(bh, rCam, 0.6, 3000, null);
         double expected = Math.asin(3 * Math.sqrt(3) * Math.sqrt(bh.f(rCam)) / rCam);
-        assertEquals(expected, lens.shadowAngle(), 1e-3);
+        assertEquals(expected, lens.shadowAngle(), 2 * 0.6 / 3000);   // within the table resolution
+    }
+
+    @Test
+    void shadowLargerThanTheTableIsReportedAsNaN() {
+        Lensing lens = new Lensing(new Schwarzschild(1.0, 0), 5, 0.3, 500, null);
+        assertTrue(Double.isNaN(lens.shadowAngle()));
     }
 
     @Test

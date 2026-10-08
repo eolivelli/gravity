@@ -22,6 +22,12 @@ public interface View {
     default void onMetricChanged(Model model) {}
     default void onShown(Model model) {}
 
+    /** False while the view still has background work pending for the current parameters. */
+    default boolean ready() { return true; }
+
+    /** Release threads and other resources when the application closes. */
+    default void dispose() {}
+
     default void mousePressed(double wx, double wy, Model model) {}
     default void mouseDragged(double wx, double wy, Model model) {}
     default void mouseReleased(double wx, double wy, Model model) {}

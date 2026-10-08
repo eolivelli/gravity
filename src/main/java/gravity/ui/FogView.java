@@ -24,6 +24,9 @@ public final class FogView implements View {
     private static final double CLOCK_PERIOD_S = 6.0;   // one turn of the far-away clock, in real seconds
 
     private int[] buf;
+    private float[] density;          // cached 1 - lapse(r) per pixel; depends only on size, zoom and body
+    private Schwarzschild densityMetric;
+    private double densityRadius;
     private WritableImage img;
     private int iw, ih;
     private double time;
@@ -54,7 +57,7 @@ public final class FogView implements View {
     @Override public void render(GraphicsContext g, Viewport vp, Model model) {
         Backdrop.clear(g, vp);
         Schwarzschild m = model.metric();
-        Backdrop.drawBody(g, vp, m, false);
+        if (!m.isBlackHole()) Backdrop.drawBody(g, vp, m, false);
         if (showFog.isSelected()) drawFog(g, vp, m);
         double s = vp.scale(), edge = m.surface() * s;
         if (m.isBlackHole()) {
@@ -64,37 +67,50 @@ public final class FogView implements View {
         g.setStroke(m.isBlackHole() ? Color.rgb(255, 255, 255, 0.7) : Color.rgb(255, 200, 120, 0.8));
         g.setLineWidth(1.2);
         g.strokeOval(vp.sx(0) - edge, vp.sy(0) - edge, 2 * edge, 2 * edge);
-        g.setTextAlign(TextAlignment.CENTER);
         Backdrop.label(g, vp.sx(0), vp.sy(0) - edge - 6, m.isBlackHole() ? "event horizon: time stands still" : "star surface",
-                Color.rgb(240, 240, 250, 0.85));
-        g.setTextAlign(TextAlignment.LEFT);
+                Color.rgb(240, 240, 250, 0.85), TextAlignment.CENTER);
         if (showClocks.isSelected()) drawClocks(g, vp, m);
         Backdrop.scaleBar(g, vp, model);
     }
 
     private void drawFog(GraphicsContext g, Viewport vp, Schwarzschild m) {
         int w = Math.max(1, (int) (vp.w() / 2)), h = Math.max(1, (int) (vp.h() / 2));
+        double scale = vp.scale() / 2;
+        double cx = w / 2.0, cy = h / 2.0;
         if (buf == null || w != iw || h != ih) {
             iw = w; ih = h;
             buf = new int[w * h];
+            density = new float[w * h];
             img = new WritableImage(w, h);
+            densityMetric = null;
         }
-        double scale = vp.scale() / 2;
-        double cx = w / 2.0, cy = h / 2.0;
+        if (densityMetric != m || densityRadius != vp.radius()) {
+            densityMetric = m;
+            densityRadius = vp.radius();
+            IntStream.range(0, h).parallel().forEach(py -> {
+                double y = (cy - (py + 0.5)) / scale;
+                for (int px = 0; px < w; px++) {
+                    double x = ((px + 0.5) - cx) / scale;
+                    double d = 1 - m.lapse(Math.hypot(x, y));
+                    density[py * w + px] = d >= 0.999 ? 2f : (float) Math.pow(d, 0.7);   // 2 marks "opaque"
+                }
+            });
+        }
         double noiseScale = 10.0 / vp.radius();
         double t = time * 0.25;
         IntStream.range(0, h).parallel().forEach(py -> {
             double y = (cy - (py + 0.5)) / scale;
             for (int px = 0; px < w; px++) {
                 double x = ((px + 0.5) - cx) / scale;
-                double r = Math.hypot(x, y);
-                double density = 1 - m.lapse(r);
-                double n = Noise.fbm(x * noiseScale, y * noiseScale, t);
-                double a = Math.pow(density, 0.7) * (0.25 + 1.3 * n);
-                if (density >= 0.999) a = 1;
-                a = Math.max(0, Math.min(1, a));
-                int alpha = (int) (a * 255);
-                buf[py * w + px] = (alpha << 24) | 0xDCE4F8;
+                float d = density[py * w + px];
+                double a;
+                if (d >= 2f) {
+                    a = 1;
+                } else {
+                    double n = Noise.fbm(x * noiseScale, y * noiseScale, t);
+                    a = Math.max(0, Math.min(1, d * (0.25 + 1.3 * n)));
+                }
+                buf[py * w + px] = ((int) (a * 255) << 24) | 0xDCE4F8;
             }
         });
         img.getPixelWriter().setPixels(0, 0, w, h, PixelFormat.getIntArgbInstance(), buf, 0, w);

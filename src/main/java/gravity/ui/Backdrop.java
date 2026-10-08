@@ -40,9 +40,7 @@ public final class Backdrop {
                 ring(g, vp, m.photonSphere(), Color.rgb(255, 210, 80, 0.45), "photon sphere");
                 ring(g, vp, m.isco(), Color.rgb(120, 200, 255, 0.3), null);
                 label(g, cx - m.isco() * s * 0.7071 - 4, cy - m.isco() * s * 0.7071 - 2, "innermost stable orbit", Color.rgb(140, 210, 255, 0.7));
-                g.setTextAlign(TextAlignment.CENTER);
-                label(g, cx, cy + Math.max(rh, m.isco() * s) + 16, "event horizon", Color.rgb(255, 255, 255, 0.7));
-                g.setTextAlign(TextAlignment.LEFT);
+                label(g, cx, cy + Math.max(rh, m.isco() * s) + 16, "event horizon", Color.rgb(255, 255, 255, 0.7), TextAlignment.CENTER);
             }
         } else {
             double rb = m.radius() * s;
@@ -59,9 +57,7 @@ public final class Backdrop {
                 g.setLineDashes(3, 5);
                 g.strokeOval(cx - rh, cy - rh, 2 * rh, 2 * rh);
                 g.setLineDashes();
-                g.setTextAlign(TextAlignment.CENTER);
-                label(g, cx, cy + Math.max(rb, m.photonSphere() * s) + 16, "star surface", Color.rgb(255, 220, 160, 0.8));
-                g.setTextAlign(TextAlignment.LEFT);
+                label(g, cx, cy + Math.max(rb, m.photonSphere() * s) + 16, "star surface", Color.rgb(255, 220, 160, 0.8), TextAlignment.CENTER);
                 if (m.photonSphere() > m.radius()) {
                     ring(g, vp, m.photonSphere(), Color.rgb(255, 210, 80, 0.45), "photon sphere");
                 }
@@ -80,12 +76,18 @@ public final class Backdrop {
         if (text != null) label(g, cx + r * s * 0.7071 + 4, cy - r * s * 0.7071 - 2, text, c.deriveColor(0, 1, 1.4, 1.6));
     }
 
+    /** Small label with its left edge at x and baseline at y. */
     public static void label(GraphicsContext g, double x, double y, String text, Color c) {
+        label(g, x, y, text, c, TextAlignment.LEFT);
+    }
+
+    public static void label(GraphicsContext g, double x, double y, String text, Color c, TextAlignment align) {
         g.setFont(SMALL);
         g.setFill(c);
-        g.setTextAlign(TextAlignment.LEFT);
+        g.setTextAlign(align);
         g.setTextBaseline(VPos.BOTTOM);
         g.fillText(text, x, y);
+        g.setTextAlign(TextAlignment.LEFT);
     }
 
     public static void scaleBar(GraphicsContext g, Viewport vp, Model model) {
@@ -112,6 +114,7 @@ public final class Backdrop {
         g.setTextBaseline(VPos.TOP);
         double y = 10;
         for (String line : lines) {
+            if (line == null || line.isBlank()) continue;
             g.setFill(Color.rgb(0, 0, 0, 0.5));
             g.fillRect(8, y - 2, textWidth(line) + 10, 17);
             g.setFill(Color.rgb(235, 235, 240));
@@ -131,6 +134,6 @@ public final class Backdrop {
         if (km >= 1e6) return String.format("%.2f million km", km / 1e6);
         if (km >= 100) return String.format("%.0f km", km);
         if (km >= 1) return String.format("%.1f km", km);
-        return String.format("%.1f m", km * 1000);
+        return String.format("%.1f metres", km * 1000);
     }
 }

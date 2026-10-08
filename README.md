@@ -6,8 +6,8 @@ ways that make sense without a physics degree.
 
 ## Running
 
-JavaFX 21 needs JDK 17 or newer. The machine's default JDK is 11, so use the
-helper script, which picks a JDK 21 from sdkman:
+JavaFX 21 needs JDK 17 or newer. If your default JDK is older, use the helper
+script, which picks the newest JDK 17+ installed by sdkman:
 
 ```bash
 ./run.sh
@@ -67,15 +67,23 @@ of "10 M" is ten gravitational radii.
   (interior Schwarzschild solution for a constant-density star inside the body),
   river speed √(rs/r), tidal tensor (+2M/r³ radial, −M/r³ tangential).
 - `Geodesic`: equatorial geodesics in Hamiltonian form (r, φ, p_r, t) with
-  conserved E and L, integrated with RK4 and a step that shrinks near the
-  horizon. Initial conditions come from a position, a direction and a speed
-  measured by a static observer, so "shoot at 30% of c" means what it says.
-  Animation advances in coordinate time, so things visibly freeze at the horizon
-  as a distant observer would see them.
+  conserved E and L, integrated with RK4. The step is a few percent of the
+  distance to the centre or to the horizon, divided by the coordinate speed, so
+  fast particles stay accurate too. Initial conditions come from a position, a
+  direction and a speed measured by a static observer, so "shoot at 30% of c"
+  means what it says. Animation advances in coordinate time, so an infalling
+  particle slows down and creeps toward the horizon as a distant observer would
+  see it; it is declared captured once it is within one part in a million of rs.
+- Inside a star the clock rate is the exact interior Schwarzschild solution for
+  constant density; the tidal tensor there is the Newtonian one (it ignores the
+  pressure term), and the river picture is illustrative only.
 - `Lensing`: because of spherical symmetry only one geodesic per viewing angle
   is needed; a table of a few thousand rays is rotated around the line of sight
   to produce the full image.
 
-Checks run during development: deflection tends to 4M/b for large impact
-parameter, the capture threshold is 3√3 M, circular orbits stay circular, and
-the shadow angle matches asin(3√3 M √f / r) to four digits.
+The tests in `src/test/java` check, among other things, that the deflection
+tends to 4M/b for large impact parameter and matches the exact elliptic
+integral in the strong field, that the capture threshold is 3√3 M, that
+circular orbits stay circular and eccentric ones precess by about
+6πM/(a(1−e²)), that the Hamiltonian is conserved, and that the shadow angle
+matches asin(3√3 M √f / r) to about three digits (the table resolution).

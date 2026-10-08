@@ -60,21 +60,30 @@ public final class Schwarzschild {
     }
 
     /**
-     * Speed at which space "flows" inward in the river model
-     * (Gullstrand-Painleve coordinates). Equals the Newtonian escape velocity;
-     * reaches 1 (the speed of light) at the horizon.
+     * Speed at which space "flows" inward in the river model: the speed,
+     * measured by a static observer, of an observer who fell from rest at
+     * infinity. Outside the body this is the Gullstrand-Painleve velocity
+     * sqrt(rs/r), equal to the Newtonian escape velocity, reaching 1 (the speed
+     * of light) at the horizon. Inside a star the same definition gives
+     * sqrt(1 - lapse^2), which keeps growing toward the centre; the river
+     * picture there is illustrative only, since the interior metric is not of
+     * the Gullstrand-Painleve form.
      */
     public double riverSpeed(double r) {
-        if (r <= 0) return 0;
+        if (r <= 0 && isBlackHole()) return 0;
         if (!isBlackHole() && r < radius) {
-            return r * Math.sqrt(rs() / (radius * radius * radius));
+            double a = lapse(r);
+            return Math.sqrt(Math.max(0, 1 - a * a));
         }
         return Math.sqrt(rs() / r);
     }
 
     /**
      * Tidal acceleration per unit separation along the radial direction, in the
-     * frame of a freely falling observer: positive means stretching.
+     * frame of a freely falling observer: positive means stretching. Outside
+     * the body this is the exact Schwarzschild value. Inside a star the
+     * Newtonian value for a uniform sphere is used (isotropic squeezing
+     * -M/R^3); the exact relativistic value adds a pressure term we ignore.
      */
     public double tidalRadial(double r) {
         if (!isBlackHole() && r < radius) return -mass / (radius * radius * radius);
@@ -87,8 +96,13 @@ public final class Schwarzschild {
         return -mass / (r * r * r);
     }
 
-    /** Local-frame speed of a circular orbit at r (massive particle), measured by a static observer. */
+    /**
+     * Local-frame speed of a circular orbit at r (massive particle), measured
+     * by a static observer. Circular orbits exist only for r > 3M (and are
+     * stable only beyond the ISCO); NaN is returned below 3M.
+     */
     public double circularOrbitSpeed(double r) {
+        if (r <= photonSphere()) return Double.NaN;
         return Math.sqrt(mass / (r - rs()));
     }
 }

@@ -16,12 +16,18 @@ import javafx.scene.paint.Color;
  */
 public final class TidalView implements View {
 
+    private static final int HUES = 32;
+    private static final Color[] PALETTE = new Color[HUES + 1];
+    private static final Color ORIGINAL = Color.rgb(255, 255, 255, 0.12);
+    static {
+        for (int i = 0; i <= HUES; i++) PALETTE[i] = Color.hsb(210 - 210.0 * i / HUES, 0.7, 0.95, 0.9);
+    }
+
     private final Slider gain = new Slider(1, 300, 60);
     private final VBox controls;
     private double time;
 
     public TidalView() {
-        gain.setShowTickLabels(false);
         controls = new VBox(6, new Label("Exaggeration"), gain,
                 new Label("Each circle is a ball of dust\nfalling freely. Watch how one\nunit of time deforms it."));
         controls.setPadding(new Insets(8, 0, 0, 0));
@@ -48,7 +54,6 @@ public final class TidalView implements View {
         double a = spacing * 0.28 * vp.scale();
         int nx = (int) Math.ceil(vp.visibleX() / spacing), ny = (int) Math.ceil(vp.visibleY() / spacing);
         double k = gain.getValue() * phase;
-        double maxStretch = 0;
         for (int i = -nx; i <= nx; i++) {
             for (int j = -ny; j <= ny; j++) {
                 double x = i * spacing, y = j * spacing;
@@ -58,16 +63,15 @@ public final class TidalView implements View {
                 double tr = m.tidalRadial(r), tt = m.tidalTangential(r);
                 double sr = Math.exp(clamp(k * tr, -1.5, 1.5));
                 double st = Math.exp(clamp(k * tt, -1.5, 1.5));
-                maxStretch = Math.max(maxStretch, sr);
                 double strength = Math.min(1, Math.abs(tr) * gain.getValue() * 3);
-                Color c = Color.hsb(210 - 210 * strength, 0.7, 0.95, 0.9);
+                Color c = PALETTE[(int) Math.round(strength * HUES)];
                 g.save();
                 g.translate(vp.sx(x), vp.sy(y));
                 g.rotate(-Math.toDegrees(Math.atan2(y, x)));
                 g.setStroke(c);
                 g.setLineWidth(1.5);
                 g.strokeOval(-a * sr, -a * st, 2 * a * sr, 2 * a * st);
-                g.setStroke(Color.rgb(255, 255, 255, 0.12));
+                g.setStroke(ORIGINAL);
                 g.setLineWidth(1);
                 g.strokeOval(-a, -a, 2 * a, 2 * a);
                 g.restore();

@@ -19,13 +19,15 @@ shown under the canvas (`View.description()`).
 - Headless visual check: `GRAVITY_SNAPSHOT_DIR=/tmp/shots ./run.sh` renders one
   PNG per view and exits. Add `GRAVITY_RADIUS_RS=2.4` to render the star case.
   Look at the PNGs after any change to rendering code.
-- There is no test suite yet. Physics changes should be checked against known
-  results (see "Verifying physics").
+- `mvn verify` runs the JUnit 5 engine tests (see "Tests and CI"). Physics
+  changes must keep them green and should add a check when a new quantity is
+  introduced.
 
 ## Layout
 
 - `gravity.engine` is pure physics, no JavaFX imports. Keep it that way so it
-  can be unit tested and reused.
+  can be unit tested and reused. (`java.awt.Color.HSBtoRGB` is used as a plain
+  colour-math function in `Lensing`; that is fine, it needs no display.)
   - `Schwarzschild`: metric quantities (clock rate, river speed, tidal tensor).
   - `Geodesic`: equatorial geodesic integrator (RK4, Hamiltonian form).
   - `Lensing`: ray-traced camera image via a one-dimensional angle table.
@@ -41,11 +43,17 @@ shown under the canvas (`View.description()`).
 - Geometric units, G = c = 1, with the mass M = 1. Lengths are in units of M,
   so rs = 2. The mass slider only changes the kilometre labels.
 - World coordinates are centred on the body; `Viewport` maps them to pixels.
-  Views never do their own pixel math outside `Viewport`.
-- Animation time is coordinate time (far-away observer). Do not switch to
-  proper time without a reason: freezing at the horizon is a feature.
-- Per-pixel rendering (fog, lensing) runs in parallel streams and, for lensing,
-  off the FX thread. Keep heavy work out of `render`.
+  Vector drawing goes through `Viewport`; per-pixel rasterizers (fog) derive
+  their own mapping from `Viewport.scale()` for speed.
+- Simulated motion (geodesics, river dust and flashes) advances in coordinate
+  time, i.e. the far-away observer's time, scaled by the speed slider. Do not
+  switch to proper time without a reason: slowing down and freezing at the
+  horizon is a feature. Purely decorative animation (fog drift, clock hands,
+  the tidal "breathing") runs in real seconds.
+- Lensing renders off the FX thread with a generation counter and a cancel
+  flag; results are applied only if still the newest. The fog texture is
+  computed per frame at half resolution in a parallel stream, with the static
+  density cached per zoom level; keep anything heavier than that off `render`.
 - Launch directions and speeds are those measured by a static local observer,
   see `Geodesic.launch`.
 
@@ -69,8 +77,9 @@ Quick checks that have been used and should still hold after engine changes:
 ## Tests and CI
 
 - `mvn verify` (JDK 21) runs the JUnit 5 engine tests in `src/test/java`.
-  They encode the physics checks listed above; extend them when touching the
-  engine.
+  They encode the physics checks listed above plus Hamiltonian conservation,
+  strong-field deflection against the exact integral and the precession
+  magnitude; extend them when touching the engine.
 - GitHub Actions (`.github/workflows/ci.yml`) runs the tests and then renders
   all views headless under Xvfb for both a black hole and a neutron star,
   uploading the PNGs as the `snapshots` artifact. Download them to review
