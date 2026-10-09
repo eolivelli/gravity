@@ -85,8 +85,8 @@ public final class Geodesic {
 
     /**
      * Value of the Hamiltonian: 0 for light, -1/2 for massive particles,
-     * conserved along the motion. Only meaningful while the particle is
-     * moving: on capture or impact r is snapped to the surface but p_r is not.
+     * conserved along the motion, including at the final point of a particle
+     * that hit the surface or reached the horizon margin.
      */
     public double hamiltonian() {
         double f = m.f(r);
@@ -145,19 +145,32 @@ public final class Geodesic {
         t += h / 6 * (k1[3] + 2 * k2[3] + 2 * k3[3] + k4[3]);
     }
 
-    private void checkBounds(double rBefore, double phiBefore, double rEscape) {
-        boolean wild = !Double.isFinite(r) || !Double.isFinite(pr) || !Double.isFinite(phi)
-                || Math.abs(r - rBefore) > 0.5 * rBefore;
+    /**
+     * One step of size h followed by the bounds check. If the step crosses the
+     * surface (or the horizon margin), the step length is bisected from the
+     * saved state so that the particle ends exactly on the surface with a
+     * consistent momentum and time, instead of somewhere past it.
+     */
+    private void stepChecked(double h, double rEscape) {
+        double r0 = r, phi0 = phi, pr0 = pr, t0 = t;
+        step(h);
         double stop = stopRadius(m);
+        boolean wild = !Double.isFinite(r) || !Double.isFinite(pr) || !Double.isFinite(phi)
+                || Math.abs(r - r0) > 0.5 * r0;
         if (wild) {
             // last resort; the step-size rule should make this unreachable
             status = m.isBlackHole() ? Status.CAPTURED : Status.HIT_SURFACE;
-            r = stop;
-            phi = phiBefore;
+            r = stop; phi = phi0; pr = pr0; t = t0;
         } else if (r <= stop) {
-            // interpolate the crossing so the hit point is on the surface, not past it
-            double frac = rBefore > r ? (rBefore - stop) / (rBefore - r) : 1;
-            phi = phiBefore + frac * (phi - phiBefore);
+            double lo = 0, hi = h;
+            for (int i = 0; i < 40; i++) {
+                double mid = 0.5 * (lo + hi);
+                r = r0; phi = phi0; pr = pr0; t = t0;
+                step(mid);
+                if (r > stop) lo = mid; else hi = mid;
+            }
+            r = r0; phi = phi0; pr = pr0; t = t0;
+            step(hi);
             r = stop;
             status = m.isBlackHole() ? Status.CAPTURED : Status.HIT_SURFACE;
         } else if (r > rEscape) {
@@ -169,9 +182,7 @@ public final class Geodesic {
     public int run(double rEscape, int maxSteps) {
         int n = 0;
         while (status == Status.MOVING && n < maxSteps) {
-            double rBefore = r, phiBefore = phi;
-            step(stepSize());
-            checkBounds(rBefore, phiBefore, rEscape);
+            stepChecked(stepSize(), rEscape);
             n++;
         }
         return n;
@@ -195,9 +206,7 @@ public final class Geodesic {
             double dtdl = energy / m.f(r);
             double needed = (target - t) / dtdl;
             if (needed < h) h = needed;
-            double rBefore = r, phiBefore = phi;
-            step(h);
-            checkBounds(rBefore, phiBefore, rEscape);
+            stepChecked(h, rEscape);
         }
     }
 }

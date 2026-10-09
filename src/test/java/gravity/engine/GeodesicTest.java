@@ -200,5 +200,25 @@ class GeodesicTest {
         }
         assertEquals(Geodesic.Status.HIT_SURFACE, coarse.status());
         assertEquals(fine.phi(), coarse.phi(), 2e-3, "hit longitude (radians)");
+        assertEquals(0.0, coarse.hamiltonian(), 1e-9, "momentum is consistent at the hit point");
+    }
+
+    @Test
+    void stoppedParticlesKeepAConsistentState() {
+        Schwarzschild star = new Schwarzschild(1.0, 4.8);
+        Geodesic m = Geodesic.launch(star, 30, 0, -1, 0.05, 0.3);
+        m.run(100, 1_000_000);
+        assertEquals(Geodesic.Status.HIT_SURFACE, m.status());
+        assertEquals(star.radius(), m.r(), 1e-9);
+        assertEquals(-0.5, m.hamiltonian(), 1e-6);   // RK4 drift over the fall, not a crossing error
+        assertTrue(m.t() > 0);
+
+        Geodesic light = Geodesic.launch(BH, -300, 3, 1, 0, 1);
+        light.run(1000, 1_000_000);
+        assertEquals(Geodesic.Status.CAPTURED, light.status());
+        assertEquals(BH.rs() * (1 + Geodesic.HORIZON_MARGIN), light.r(), 1e-12);
+        // at f ~ 1e-6 the two terms of H are ~1e6 each and cancel to roundoff: check relative to their size
+        double termSize = light.energy() * light.energy() / BH.f(light.r());
+        assertTrue(Math.abs(light.hamiltonian()) / termSize < 1e-6, "relative residual " + light.hamiltonian() / termSize);
     }
 }
